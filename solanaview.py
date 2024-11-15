@@ -2,6 +2,8 @@
 import os
 import pathlib
 
+from lief.ELF import Relocation
+
 from binaryninja import BinaryView, Architecture, SegmentFlag, SectionSemantics, Symbol, SymbolType, Platform
 import lief
 
@@ -136,7 +138,7 @@ class SolanaView(BinaryView):
                 if s.name in FUNCTION_SIGS:
                     f = self.get_function_at(pos)
                     if f is not None:
-                        f.function_type = FUNCTION_SIGS[s.name]
+                        f.type = FUNCTION_SIGS[s.name]
 
                 curr_extern += 1
 
@@ -162,7 +164,18 @@ class SolanaView(BinaryView):
                 hi = v >> 32
                 self.write(addr + 4, lo.to_bytes(4, 'little'))
                 self.write(addr + 12, hi.to_bytes(4, 'little'))
-            elif r.type == 10:
+
+
+            elif r.type == Relocation.TYPE.BPF_64_ABS32:
+                lo = int.from_bytes(self.read(addr + 4, 4), 'little')
+                symbol_address = r.symbol.value if r.symbol else 0  # Retrieve the symbol's value if available
+
+                updated_value = (symbol_address & 0xffffffff)
+                lo = updated_value
+
+                self.write(addr + 4, lo.to_bytes(4, 'little'))
+
+            elif r.type == Relocation.TYPE.BPF_64_32:
                 if r.symbol.is_function:
                     # BPF Function
                     target = r.symbol.value + (1 << 32)
